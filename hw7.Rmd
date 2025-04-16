@@ -2,8 +2,8 @@
 title: "HW 7"
 subtitle: "Data 180, Professor Kessler"
 author: 
-  name: "Your Name"
-  email: "XXXX@dickinson.edu"
+  name: "Caroline Krauth"
+  email: "krauthc@dickinson.edu"
 date: '`r format(Sys.Date(), "%B %d, %Y")`'
 output: 
   html_document
@@ -33,14 +33,14 @@ Read the `news.csv` into R and create the object `news` using
 ```{r}
 library(tidyverse)
 library(tm)
-news<-read.csv("news.csv",header=T)
+news<-read.csv('/Users/carolinekrauth/Documents/GitHub/homework-7-krauthc4/Homework 7/news.csv',header=T)
 ```
 
 Read also the positive and negative word dictionaries. This will later come in handy:
 
 ```{r}
-posWords <- scan("positive-words.txt", character(0), sep = "\n")  # 2006 items
-negWords <- scan("negative-words.txt", character(0), sep = "\n")  # 4783 items
+posWords <- scan('/Users/carolinekrauth/Documents/GitHub/homework-7-krauthc4/Homework 7/positive-words.txt', character(0), sep = "\n")  # 2006 items
+negWords <- scan('/Users/carolinekrauth/Documents/GitHub/homework-7-krauthc4/Homework 7/negative-words.txt', character(0), sep = "\n")  # 4783 items
 head(posWords,15)
 head(negWords,15)
 ```
@@ -50,17 +50,26 @@ head(negWords,15)
 First, check how many years of news data we have loaded in in R.
 ```{r}
 
+range(news$year)
+num_years <- length(unique(news$year))
+
 ```
 
 # Question 2
 Store the headlines column in a vector of text named `charVector`. Print the first 6 entries in the vector.
 ```{r}
 
+charVector <- news$headline_text
+head(charVector,6)
+
 ```
 
 # Question 3
 Convert `charVector` into a vector source object named `wordVector` using the function `VectorSource()`. (See class notes on how to do this) Then convert `wordVector` into a corpus object named `wordCorpus` using the function `Corpus()`.
 ```{r}
+
+wordVector <- VectorSource(charVector)
+wordCorpus <- Corpus(wordVector)
 
 ```
 
@@ -73,17 +82,37 @@ We are now ready to do some basic trimming on the text. Do the following on the 
 
 ```{r}
 
+wordCorpus = tm_map(wordCorpus,content_transformer(tolower))
+wordCorpus = tm_map(wordCorpus, removePunctuation)
+wordCorpus = tm_map(wordCorpus, removeNumbers)
+wordCorpus = tm_map(wordCorpus,removeWords,stopwords("english"))
+
+wordCorpus[["1"]][["content"]]
+
+
 ```
 
 # Question 5
 What is a term document matrix? Explain. Create a term document matrix from the news vector and store it as an object named `tdm` using the function `TermDocumentMatrix`.
 ```{r}
 
+#A way to show which words are in which documents through a binary system where 0 or 1 indicates whether or not a word is in the particular document 
+
+tdm <- TermDocumentMatrix(wordCorpus)
+tdm 
+
 ```
 
 # Question 6
 Convert `tdm` into a matrix named `m`. Store the frequency of occurrence of each word in the news headlines in an object named `wordCounts`. Return the top 10 most frequent words. (Note: if you run into memory issues creating the matrix `m`, try using one of the computers in Tome.)
 ```{r}
+
+m <- as.matrix(tdm)
+
+wordCounts <- rowSums(m) 
+wordCounts <- sort(wordCounts,decreasing=TRUE)
+head(wordCounts,10)
+
 
 ```
 
@@ -92,6 +121,8 @@ Create a barplot of the words that showed up at least 50 times in the news headl
 
 ```{r}
 
+barplot(wordCounts[wordCounts>50],las=2,cex.names=0.75)
+
 ```
 
 
@@ -99,6 +130,46 @@ Create a barplot of the words that showed up at least 50 times in the news headl
 What is the percentage of positive words in the news headlines? What is the percentage of negative words? Make a barplot for each (for positive and negative words that showed up separately) showing the most frequent words for words that showed up at least 20 times. (Note: don't forget to get the total number of unique words that showed up in the data.)
 
 ```{r}
+
+unique_words <- rownames(tdm)
+total_unique_words <- length(unique_words)
+
+```
+
+```{r}
+
+library(tidytext)
+library(dplyr)
+
+headlines_df <- tibble(news$headline_text)
+posWords <- tibble(posWords)
+negWords <- tibble(negWords) 
+
+tokens <- headlines_df %>% 
+  unnest_tokens(word) #??
+
+total_words <- sum(tokens$word_count)
+
+positive_words <- tokens %>% 
+  inner_join(posWords, by='word') %>% 
+  summarize(total=sum(word_count)) %>% 
+  mutate(percentage=n/sum(n)*100)
+
+negative_words <- tokens %>% 
+  inner_join(posWords, by='word') %>% 
+  summarize(total=sum(word_count)) %>% 
+  mutate(percentage=n/sum(n)*100)
+
+tibble(positive_pct = positive_words,negative_pct = negative_words)
+
+result <- calculate_pos_neg_pct(headlines_df,positive_words,negative_words)
+
+#sentiment_analysis <- headlines_df %>% 
+ # anti_join(stopwords("english")) %>% 
+  ##inner_join(posWords) %>% 
+  #inner_join(negWords)
+
+#??
 
 ```
 
@@ -113,15 +184,24 @@ Using `ggplot2`, create a barplot for the frequency of articles released in each
 
 ```{r}
 
+library(ggplot2)
+
+ggplot(data=news,(aes(x=yearmonth,levels=factor(year))))+
+  geom_bar()+
+  labs(title="Frequency of Articles by Year and Month",xlab="Month of Year",ylab="Number of Articles Released")+
+  theme(axis.text=element_text(size=4,angle=90))
+
+
 ```
 
 Let's now practice working with the `quanteda` package. Install the package first if you don't have them in your computer and load them in in R.
 
 ```{r}
 #install.packages("quanteda.textstats")
-#install.packages("quanteda.textmodels")
+install.packages("quanteda.textmodels")
 library(quanteda)
 library(quanteda.textstats)
+library(quanteda.textmodels)
 ```
 
 # Question 10
@@ -134,21 +214,56 @@ Using the `textstat_frequency()` function, return the 20 most frequent single wo
 text_data <- charVector %>% tokens(remove_punct=T,remove_symbols=T) %>% tokens_remove(stopwords("en")) %>% dfm()
 ```
 
+```{r}
+output = textstat_frequency(text_data,n=20)
+output
+```
+
 # Question 11
 Repeat the previous question for word pairs (frequency of 2 words that show up, instead of 1 word). We can convert tokens into ngrams with `token_ngrams`. If we want pairs we say `token_ngrams(text_data,n=2)` and convert this resulting token vector into the needed `dfm()`
 ```{r}
+char_vec = tolower(news$headline_text)
+text_bigram <- char_vec %>% 
+  tokens(remove_punct=T,remove_symbols=T,remove_numbers=T) %>% 
+  tokens_remove(stopwords("en")) %>% 
+  
+bigrams <- tokens_ngrams(text_bigram,n=2) %>% dfm()
 
+output2 = textstat_frequency(bigrams,n=20)
 ```
 
 # Question 12
 Create a corpus object using `corpus()` function. Store it in an object named `newscorpus`. Convert `newscorpus` into paragraphs with `corpus_reshape()`.
 ```{r}
 
+newscorpus <- corpus(char_vec) 
+paras <- corpus_reshape(newscorpus,to="paragraphs")
+
+
 ```
 
 # Question 13
 Create a term document matrix named `news_dtm` by using the `dfm_wordstem()` function. While you call `dfm_wordstem()`, make sure to clean the paragraphs by keeping only the stems of the words, removing punctuations, removing symbols, removing numbers, and removing stopwords. If you wish to get rid of anything that does not look correct in the data (such as weird bunch of characters that show up as "words") you may trim them out at this stage using `dfm_remove()`. Finally, trim `news_dtm` such that it contains only words that show up at least 50 times using `dfm_trim(data, min_docfreq=50)`. Print the first 6 rows of `news_dtm`. (Note: Again, ignore warnings.)
 ```{r}
+library(dplyr) 
+
+news_dtm <- paras %>% 
+  tokens(remove_punct=T,remove_symbols=T,remove_numbers=T) %>% 
+  tokens_remove(stopwords('en')) %>% 
+  dfm() %>% 
+  dfm_trim(min_docfreq=50)
+
+head(news_dtm,6)
+
+
+news_dtm_stem <- paras %>% 
+  tokens(remove_punct=T,remove_symbols=T,remove_numbers=T) %>% 
+  tokens_remove(stopwords('en')) %>% 
+  dfm() %>% 
+  dfm_trim(min_docfreq=50) %>% 
+  dfm_wordstem()
+
+head(news_dtm_stem,6)
 
 ```
 
@@ -156,6 +271,11 @@ Create a term document matrix named `news_dtm` by using the `dfm_wordstem()` fun
 Create a wordcloud of `news_dtm` using `textplot_wordcloud()`. Comment on words that you were surprised and not surprised to see in the news headlines dataset. Note what happens in your plot if you change the above `dfm_wordstem` to just `dfm`.
 ```{r}
 library("quanteda.textplots")
+
+textplot_wordcloud(news_dtm)
+textplot_wordcloud(news_dtm_stem)
+
+#nothing surprising
 
 ```
 
@@ -165,7 +285,7 @@ Let's now do topic modeling. Make sure to load necessary packages via
 ```{r}
 library("topicmodels")
 library('tidytext')
-#install.packages("reshape2")
+install.packages("reshape2")
 library(reshape2)
 ```
 
@@ -174,18 +294,64 @@ Run the LDA algorithm using k = 8. Store your output in object named `topic_mode
 
 ```{r}
 
+headline_topics <- convert(news_dtm, to="topicmodels")
+
+topic_model <- LDA(headline_topics,method="VEM",control=list(seed=1234),k=8)
+
+terms(topic_model,10)
+
 ```
 
 
 # Question 16
 Plot betas of top 10 words with highest beta for each 8 topic. Comment on 3-4 news headline groups in terms of their topic content.
 ```{r}
+library(dplyr)
+library(ggplot2)
+
+tidy_topics <- tidy(topic_model, matrix = "beta")
+tidy_topics
+
+head_top_topics <- tidy_topics %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 10) %>% # 
+  ungroup() %>% 
+  arrange(topic, -beta) 
+
+head_top_topics %>%
+  mutate(term = reorder_within(term, beta, topic)) %>% 
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~topic, scales = "free") + 
+  scale_y_reordered() 
+
+#topic 1 is related to the police and judicial systems in cities, topic 7 relates to farmers and government, topic 8 is related to courts and a fire?
 
 ```
 
 # Question 17
 Plot gammas of top 5 documents with highest gamma for each 8 topic. Return the contents of the 5 documents with highest gamma only for topics 1 and 2. Does it makes sense that these documents are assigned to topics 1 and 2 accordingly? Comment.
 ```{r}
+
+tidy_news <- tidy(topic_model, matrix = "gamma")
+
+top_headlines <- tidy_news %>%
+  group_by(topic) %>%
+  slice_max(gamma, n = 5) %>% 
+  ungroup() %>%
+  arrange(document, -gamma)
+
+top_headlines %>%
+  mutate(document = reorder_within(document, gamma, topic)) %>%
+  ggplot(aes(gamma, document, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~topic, scales = "free") +
+  scale_y_reordered() 
+```
+
+```{r}
+#how to return contents of documents??
+#print(tidy_news$document[text528])
 
 ```
 
